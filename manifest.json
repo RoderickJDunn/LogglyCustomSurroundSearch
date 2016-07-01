@@ -1,0 +1,30 @@
+{
+    "manifest_version":2,
+
+    "name":"LogglySurroundingEvents",
+    "description":"Expand Loggly's ViewSurroundingEvents functionality",
+    "version":"0.1",
+    "permissions": [
+        "tabs",
+        "webRequestBlocking",
+        "webRequest",
+        "webNavigation",
+        "*://*/*"
+    ],
+    "background":{
+        "scripts":["background.js"]
+    },
+    "content_scripts": [ {
+      "matches": ["http://piper.loggly.com/*", "https://piper.loggly.com/*"],
+      "js": ["content.js"]
+    }],
+    "page_action":{
+        "default_icon":"icon.png",
+        "default_popup":"popup.html",
+        "default_title":"Configure LogglySurroundingEvents"
+    },
+    "icons":{
+        "16":"icon.png"
+    }
+   
+}
