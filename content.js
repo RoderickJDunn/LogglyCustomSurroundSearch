@@ -1,11 +1,10 @@
-// TODO: IMPORTANT: If searching without a host, then clicking "View Surrounding Events" should
-//                  show events of THAT HOST (ADD THAT AS FILTER OR SEARCH-TEXT AUTOMATICALLY)
-// TODO (should-have): UI popup for modifying search for SurroundingEvents 
-// TODO (should-have): Scroll to event location, and highlight the original event
-// TODO: I wonder if I could just copy the filters and search string from the original tab into the "SurroundingEvents" tab
+// TODO: Scroll to exact event within 50-event container
+// TODO: Wait to scroll - only start scrolling once the events-list contains >0 children
+// TODO: add rest of search popup functionality (search text and filters)
 // TODO: may need to append the content_script URL in manifest with "search", so that it only runs in the search page of Loggly
 // TODO (nice-to-have): Add 'highlight' feature: rather than just filtering out unimportant logs, highlight the important ones
 // TODO (nice-to-have): Double-Click on the timeline, auto-scroll to that time in the events list
+// TODO (nice-to-have): Auto-Scroll functionality only works if events are sorted in decending (newest-oldest) order
 
 console.log("hello");
 
@@ -34,10 +33,7 @@ window.addEventListener("load", function(e) {
 
 window.addEventListener("pageshow", function (e) {
     console.debug("Page show!");
-
 });
-
-
 
 var tabNav = document.getElementsByClassName("search-tab-nav feature-tour-step10");
 var observer = new MutationObserver(function(mutations) {
@@ -69,7 +65,6 @@ var observer = new MutationObserver(function(mutations) {
     });
 });
 
-
 // configuration of the observer:
 var config = { attributes: true, childList: true, characterData: true };
  
@@ -87,18 +82,7 @@ for (var i=0; i < contentsOfAllLogglyTabs.length; i++) {
             activeContents = contentsOfAllLogglyTabs[i];
         }
 }
-// document.body.addEventListener('keyup', function(e){
-//     console.info("KeyUp");
-//     var key = e.which || e.keyCode;
-//     if (key === 13) { // 13 is enter
-//       // code for enter
-//         console.log("Enter key");
-//         if (e.target.className.includes("search-input main-searchbox")) { // this isn't working
-//             updateSearchElementsCache();
-//         }
-      
-//     }
-// });
+
 var eventContentPattern = /(event-text svg-margin|column-timestamp|event-row selected-event row-collapsed|flex-content|event-row selected-event expanded-content)/;
 document.body.addEventListener('click', function(e){
     console.log("Click Event----");
@@ -108,9 +92,6 @@ document.body.addEventListener('click', function(e){
     contentsOfAllLogglyTabs = document.getElementsByClassName("search-content-loaded ng-scope");
     console.info(e.target.className);
     
-    
-    //displayCustomizationPopup();
-   
     if (e.target.className.match(eventContentPattern)){
         // user clicked on an event
         console.info("Expanding event");
@@ -118,24 +99,6 @@ document.body.addEventListener('click', function(e){
         console.info("EventRow root: " + eventRow.className);
         updateSearchElementsCache(eventRow);
     }
-    // else if (e.target.name == "tab-group") {
-    //     // user clicked on a Loggly tab, update the "activeContents" variable
-    //     console.info("Changing tabs");
-    //     updateSearchElementsCache();
-    //     }
-    // else if (e.target.className.includes("btn btn-primary run-search")) {
-    //     console.info("Search button clicked");
-    //     updateSearchElementsCache();
-    // }
-    // else if (e.target.nodeName == "BUTTON" && e.target.childNodes.length > 1 ) {
-    //     console.log("   A button with >1 childNode was clicked!");
-    //     var btn = e.target;
-    //     console.log("   Target Text: " + e.target.childNodes[1].nodeValue);
-    //     if (btn.childNodes[1].nodeValue == "View Surrounding Events") {
-    //         console.info("**SurroundingEvents Button Clicked**");
-    //         searchSurroundingEvents();
-    //     }
-    // }
 });
 
 // takes a EventRow root element, or one of it's decendants, and returns the EventRow root element (search is recursive)
@@ -172,7 +135,6 @@ function updateSearchElementsCache(eventRow){
                 console.log("Setting formAction");
                 surrEventsBtn.setAttribute("formAction", "asdf");
                 surrEventsBtn.setAttribute("baseURI", "asdf"); 
-                
             } catch (err) {
                 console.log("Error setting formAction: " + err)
             }
@@ -264,7 +226,7 @@ function tryStylingTimer() {
     console.log("Events container children (events): " + events);
     
     console.info("EventRows (surrSearch): " + events.length);
-    if (countStyleTimer > 20) {
+    if (countStyleTimer > 50) {
         console.log("clearing timer" + styleTimerId);
         window.clearInterval(styleTimerId);
         countStyleTimer = 0;
@@ -283,15 +245,18 @@ function tryStylingTimer() {
     eventsContainerScrollPage = eventsContainer.lastElementChild;
     events = eventsContainerScrollPage.children;
     console.info("Searching for orinating event to highlight - events length: " + events.length);
-    for (var i = (Math.floor(events.length/2) - 2); i < events.length; i++ ) {
-        if (i < 0) continue;
-        else if (events[i].getAttribute("data-id") == evDataId) {
+    for (var i = 0; i < events.length; i++ ) {
+        if (events[i].getAttribute("data-id") == evDataId) {
             console.info("Event found by data-id... highlighting and scrolling to event");
-            window.clearInterval(styleTimerId);
+            //window.clearInterval(styleTimerId);
+            var offset = events[i].offsetTop;
+            console.log("Offset: " + offset);
+            preciseScroll(events[i], eventsContainer);
             styleSearchResults(events[i]);
             break;
         }
     }
+
 }
 
 /* Scroll towards the event specified by the event id within the event container. 
@@ -301,9 +266,9 @@ function tryStylingTimer() {
 */
 var scrollCount = 0;
 function scrollTowardsEvent(evDataId, evTimestamp, eventsContainer, totalEvents) {
-    console.info("Scrolling to event --  Id: " + evDataId + "  Timestamp: " + evTimestamp);
+    console.info("Scrolling toward event --  Id: " + evDataId + "  Timestamp: " + evTimestamp);
     scrollCount++;
-    if (scrollCount > 100) { 
+    if (scrollCount > 200) { 
         scrollCount = 0;
         window.clearInterval(styleTimerId);
         return false;
@@ -324,7 +289,14 @@ function scrollTowardsEvent(evDataId, evTimestamp, eventsContainer, totalEvents)
         eventsContainer.scrollTop = eventsContainer.scrollHeight;
         return false;
     }
-    
+}
+
+/* Scroll to the precise event from which ViewSurroundingEvents was clicked */
+function preciseScroll(event, eventScrollPage) {
+    console.info("Precise Scrolling to event... ");
+    console.info("ScrollPage = " + eventScrollPage.lastElementChild.className);
+    console.info("Offset = " + event.offsetTop);
+    eventScrollPage.scrollTop = event.offsetTop - 10;
 }
 
 function styleSearchResults(eventRow) {
@@ -337,14 +309,8 @@ function emptyOrNull(s) {
     }
 }
 
-// function between(num, upper, lower) {
-//     if (num > lower && num < upper) return true;
-//     else return false;
-// }
-
 function parseStringForHosts(searchString) {
     console.info("Parsing search string: " + searchString);
-
 	var occurences = (searchString.match(/syslog.host:/g) || []).length;   
     console.info("Occurances of 'syslog.host:' : " + occurences); 
     //  return an array of hosts
@@ -393,9 +359,9 @@ function displayCustomizationPopup() {
         </div>\
         <div style="padding:5px">\
             <input id="customizeRdoBtn" type="radio" name="customize" style="margin-right:20px; margin-bottom:10px">Customize Search <br>\
-            <div style="pointer-events:none; -webkit-filter:opacity(30%)">\
+            <div id="customizationFields" style="pointer-events:none; -webkit-filter:opacity(30%)">\
                 <div style="padding:5px">\
-                    <span>Search Text</span> <input type="text" style="min-width:300px"> <br>\
+                    <span>Search Text</span> <input type="text" style="width:100%"> <br style="clear: left;" />\
                 </div>\
                 <div style="padding:5px">\
                     <span>Filters</span> <br>\
@@ -422,39 +388,48 @@ function displayCustomizationPopup() {
     dlg.style.position = "relative";
     dlg.style.backgroundColor = "white";
     
-    
-    
     styleLogglyContent();
-    
     document.body.insertBefore(dlg, document.body.firstChild); 
-
     addPopupListeners(); 
 
     // TODO: add listeners to radio buttons and OK/Cancel
 }
+function disableCustomizationFields() {
+    var customizationFields = document.getElementById("customizationFields");
+    customizationFields.style.pointerEvents = "none";
+    customizationFields.style.webkitFilter = "opacity(30%)";
+}
+
+function enableCustomizationFields() {
+    var customizationFields = document.getElementById("customizationFields");    
+    customizationFields.style = "";
+    // customizationFields.style.pointerEvents = "auto";
+    // customizationFields.style.webkitFilter = "opacity(100%)";
+}
 
 function styleLogglyContent() {
+    console.log("Styling loggly content");
     var content = document.body.getElementsByClassName("content-wrapper")[0];
     content.style.position = "relative";
     content.style.pointerEvents = "none";
     content.style.top = "-375px";
     content.style.webkitFilter = "brightness(60%)";
+    //document.body.className = "modal-open";
 }
 
 function removeStylesLogglyContent() {
     var content = document.body.getElementsByClassName("content-wrapper")[0];
-    content.style.pointerEvents = "auto";
-    content.style.position = "static";
-    content.style.top = "0";
-    content.style.webkitFilter = "brightness(100%)";
+    content.style = "";
 }
 
 function addPopupListeners(content) {
     document.getElementById("hostRdoBtn").addEventListener('click', function(e) {
         console.log("Clicked host Radio button");
+        disableCustomizationFields();
     });
     document.getElementById("customizeRdoBtn").addEventListener('click', function(e) {
         console.log("Clicked Customize radio button");
+        enableCustomizationFields();
     });
     document.getElementById("okBtn").addEventListener('click', function(e) {
         console.log("Clicked Popup OK");
@@ -489,9 +464,3 @@ function getContentsForTab(tabId) {
         }
     }
 }
-
-
-
-// Request URI's !!! Found in 'Properties' of Dev Console with Surround btn selected
-//"https://piper.loggly.com/search#terms=syslog.host%3A%22tv2%22&from=2016-06-26T17%3A04%3A21.745Z&until=2016-06-26T17%3A14%3A07.745Z&source_group="
-// "https://piper.loggly.com/search#terms=syslog.host%3A%22tv2%22&from=2016-06-26T17%3A04%3A21.745Z&until=2016-06-26T17%3A14%3A07.745Z&source_group="
