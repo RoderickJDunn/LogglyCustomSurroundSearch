@@ -1,10 +1,11 @@
-// TODO: Scroll to exact event within 50-event container
 // TODO: Wait to scroll - only start scrolling once the events-list contains >0 children
 // TODO: add rest of search popup functionality (search text and filters)
 // TODO: may need to append the content_script URL in manifest with "search", so that it only runs in the search page of Loggly
-// TODO (nice-to-have): Add 'highlight' feature: rather than just filtering out unimportant logs, highlight the important ones
+// TODO (nice-to-have): Add 'highlight' feature: rather than just filtering out unimportant logs, highlight the important ones - EFFORT: HIGH
 // TODO (nice-to-have): Double-Click on the timeline, auto-scroll to that time in the events list
 // TODO (nice-to-have): Auto-Scroll functionality only works if events are sorted in decending (newest-oldest) order
+// TODO: catch/remove errors from timers executing before page loaded
+// TODO: remove errors caused by collapsing an event
 
 console.log("hello");
 
@@ -168,7 +169,7 @@ function startSearchTimer() {
         surrBtnFlag = false;
         surrTabFlag = false;
         displayCustomizationPopup();
-        console.log("POOOOOOOPPPPPPPPPPPPEDDDD UPPPPPPPPPPPPP !!!!!!!!!");        
+        console.log("POP UP");
         window.clearInterval(searchTimerId);
     }
 }
@@ -191,7 +192,7 @@ function searchSurroundingEvents(tabId, hostOfEvent) {
         console.info("SearchText: " + newSearchText);
         searchBoxes[0].value = newSearchText;
         doSearch();
-        styleTimerId = setInterval(tryStylingTimer, 200);
+        styleTimerId = setInterval(tryStylingTimer, 500);
         console.log("Style TimerId: " + styleTimerId);
     } 
     else {
@@ -203,6 +204,7 @@ function searchSurroundingEvents(tabId, hostOfEvent) {
 function doSearch() {
     var searchButtons = activeContents.getElementsByClassName("btn btn-primary run-search");
     if (searchButtons.length == 1) {
+        console.debug("Clicking search");
         var searchBtn = searchButtons[0];
         searchBtn.click();
     }
@@ -217,7 +219,7 @@ function tryStylingTimer() {
     console.debug("Style Timer");
     countStyleTimer++;
     var eventsContainerScrollPage = activeContents.getElementsByClassName("events-container tracking-category scroll-page")[0];
-    console.log("Events container: " + eventsContainerScrollPage);
+    console.log("Events container page: " + eventsContainerScrollPage.className);
     var totalEvents = eventsContainerScrollPage.getAttribute("data-events-total");
     console.log("Total Events: " + totalEvents);
     
@@ -238,6 +240,7 @@ function tryStylingTimer() {
     if (!scrollTowardsEvent(evDataId, evTimestamp, eventsContainer, totalEvents)) {
         return;
     };
+    scrollCount = 0;
     window.clearInterval(styleTimerId);
     styleTimerId = -1;
     countStyleTimer = 0;
@@ -267,6 +270,7 @@ function tryStylingTimer() {
 var scrollCount = 0;
 function scrollTowardsEvent(evDataId, evTimestamp, eventsContainer, totalEvents) {
     console.info("Scrolling toward event --  Id: " + evDataId + "  Timestamp: " + evTimestamp);
+    console.debug("ScrollCount = " + scrollCount);
     scrollCount++;
     if (scrollCount > 200) { 
         scrollCount = 0;
@@ -274,14 +278,17 @@ function scrollTowardsEvent(evDataId, evTimestamp, eventsContainer, totalEvents)
         return false;
     }
     // FIX-ME - this will only work if events are sorted in decending order
-
+    // FIX-ME** - this fails sometimes, with lastChildTimestamp null, passes event. Related to all events showing rather than only host's
     var lastChildTimestamp = eventsContainer.lastElementChild.lastElementChild.getAttribute("data-timestamp");
+    console.info("EventsContainer: " + eventsContainer);
+    console.info("last child of EventsContainer: " + eventsContainer.lastElementChild);
     console.info("Last child Timestamp: " + lastChildTimestamp);
 
-    if (lastChildTimestamp == undefined) return false;
+    if (lastChildTimestamp == undefined || lastChildTimestamp == null) return false;
     if (evTimestamp > lastChildTimestamp){
         console.log("In correct scrolling div.")
         eventsContainer.scrollTop = eventsContainer.scrollHeight;
+        scrollCount = 0;
         return true;
     }
     else {
